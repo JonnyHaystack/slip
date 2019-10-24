@@ -7,8 +7,8 @@ VERSION="2.0.0.0"
 # Sane defaults in case of not being set in the config / config not existing.
 CREDENTIALS_FILE="$HOME/.config/slip/credentials"
 RECORD_PIDFILE="/tmp/slip_record.pid"
-IMAGES="$HOME/Pictures"
-VIDEOS="$HOME/Videos"
+IMAGES="$HOME/Pictures/Slip"
+VIDEOS="$HOME/Videos/Slip"
 GIF_SCALE="640"
 GIF_FPS=15
 SOUND=0
@@ -121,7 +121,9 @@ function clip_clear() {
 
 # Run slop and get the geometry line.
 function slop_geom() {
-    if [ "$1" = "image" ]; then
+    if [ $GEOMETRY ]; then
+        echo "$GEOMETRY"
+    elif [ "$1" = "image" ]; then
         slop -f '%wx%h+%x+%y'
     else
         slop -f '%wx%h|%x,%y' # | sed -e s/+/\|/ -e s/+/,/
@@ -331,21 +333,30 @@ if [ "$1" = "-nu" -o "$1" = "--no-upload" -o "$2" = "-nu" -o "$2" = "--no-upload
     NOUPLOAD=1
 fi
 
-if [ "$1" = "-h" -o "$1" = "--help" ]; then
-    usage
-    exit 0
-elif [ "$1" = "-v" -o "$1" = "--version" ]; then
-    echo "Version: $VERSION"
-    exit 0
-elif [ "$1" = "-s" -o "$1" = "--screenshot" ]; then
-    main "screenshot"
-elif [ "$1" = "-g" -o "$1" = "--gif" ]; then
-    main "gif"
-elif [ "$1" = "-r" -o "$1" = "--record" ]; then
-    main "video"
-elif [ "$1" = "-q" -o "$1" = "--stop" ]; then
-    main "stop"
-elif [ $# == 0 ]; then
+# Set options from parameter values
+while getopts "hvsgrqd:u:f:" opt; do
+    case ${opt} in
+    h )
+        usage
+        exit 0
+        ;;
+    v )
+        echo "Version: $VERSION"
+        exit 0
+        ;;
+    s ) RECORDING_TYPE="screenshot" ;;
+    g ) RECORDING_TYPE="gif" ;;
+    r ) RECORDING_TYPE="video" ;;
+    q ) RECORDING_TYPE="stop" ;;
+    d ) GEOMETRY="$OPTARG" ;;
+    u ) UPLOAD_TO="$OPTARG" ;;
+    f ) FILENAME="$OPTARG" ;;
+    esac
+done
+
+if [ $RECORDING_TYPE ]; then
+    main "$RECORDING_TYPE"
+else
     if [ -a "$RECORD_PIDFILE" ]; then
         main $($DMENU_CMD <<< "$DMENU_RECORD_OPTS")
     else
