@@ -92,6 +92,41 @@ function upload_gfycat() {
     echo -n "$gfyname"
 }
 
+function upload() {
+    local choice
+
+    local fn=$1   # Final file name
+    local tfn=$2  # Temp file name
+
+    size=$(du -k $fn | cut -f1)
+
+    if [ $NOUPLOAD == 0 ]; then
+        if [ "$size" -lt "${MAX_GIF_SIZE_IMGUR}" ]; then
+            choice=$($DMENU_CMD <<< $DMENU_UPLOAD_OPTS)
+        else
+            choice=$($DMENU_CMD <<< $DMENU_UPLOAD_OPTS_BIG)
+        fi
+
+        if [ "$choice" = "upload (gfycat)" ]; then
+            clip_clear
+            name=$(upload_gfycat "$tfn")
+            url="https://gfycat.com/$name"
+            notify "Uploading to $url..." 7
+            echo "$url"
+            echo -n "$url" | xsel -bi  # Read to clipboard.
+        elif [ "$choice" = "upload (imgur)" ]; then
+            clip_clear
+            output=$(upload_imgur "$fn")
+            url=$(parse "imgur" "$output")
+            notify "$url" 7
+            echo "$url"
+            echo -n "$url" | xsel -bi  # Read to clipboard.
+        elif [ "$choice" = "delete" ]; then
+            rm $fn
+        fi
+    fi
+}
+
 function check_auth_credentials() {
     token_expire_time=0
     if [ -f "${CREDENTIALS_FILE}" ]; then
@@ -126,13 +161,8 @@ function slop_geom() {
     elif [ "$1" = "image" ]; then
         slop -f '%wx%h+%x+%y'
     else
-        slop -f '%wx%h|%x,%y' # | sed -e s/+/\|/ -e s/+/,/
+        slop -f '%wx%h|%x,%y'
     fi
-    #elif [ "$1" = "video" ]; then
-        #slop -f '%wx%h+%x+%y' | sed -e s/+/\|/ -e s/+/,/
-        #slop | sed -n 5p | sed -e s/G=// -e s/+/\|/ -e s/+/,/
-    #elif [ "$1" = "gif" ]; then
-        #slop -f '%wx%h+%x+%y' | sed -e s/+/\|/ -e s/+/,/
 }
 
 # Take the shot (or start the video.)
@@ -158,7 +188,6 @@ function shot() {
         filename="$VIDEOS/gif-`date +%Y-%m-%d-%H%M%S`$extension"    # .gif
         # Record a video to be converted to gif.
         ffmpeg -f x11grab -video_size "$2" -framerate $GIF_FPS -i "$DISPLAY+$3" -loglevel quiet -c:v libx264 -preset ultrafast $tmpfilename &
-        #ffmpeg -f x11grab -video_size "$2" -framerate 15 -i "$DISPLAY+$3" -vf scale="$GIF_SCALE:-1" $filename &> /dev/null &
 
         # We need to access this information later.
         ratio=$(awk -F"x" '{ print int($1/$2) }' <<< "$2") # We only really need a binary answer.
@@ -202,45 +231,16 @@ function stop_rec() {
 
     local pid=$1                      # Process id (for killing ffmpeg).
     local tfn=$3                      # Temp file name (for gifs).
-    local fn=$4                       # File name for the gif/vid we're saving.
     local pfn="${tfn}-palette.png"    # Palette file name (for gif rendering).
+    local fn                          # File name for the gif/vid we're saving.
 
     # Stop recording.
     kill_ffmpeg "$pid"
 
-    # When processing a gif, we canvert it straight away and then upload.
-    # NOTE: gfycat does not require the video to be converted, but we convert it anyway to store
-    #   the .gif file.
-    # Is this actually a good idea?  We could just store the .mkv instead, but then we lose the ability to store .gif.
+    # When processing a gif, we convert it straight away and then upload.
     if [ "$2" = "gif" ]; then
         fn=$(convert_to_gif "$tfn" "$pfn" "$fn" "$5")
-        size=$(du -k $fn | cut -f1)
-
-        if [ $NOUPLOAD == 0 ]; then
-            if [ "$size" -lt "${MAX_GIF_SIZE_IMGUR}" ]; then
-                choice=$($DMENU_CMD <<< $DMENU_UPLOAD_OPTS)
-            else
-                choice=$($DMENU_CMD <<< $DMENU_UPLOAD_OPTS_BIG)
-            fi
-
-            if [ "$choice" = "upload (gfycat)" ]; then
-                clip_clear
-                name=$(upload_gfycat "$tfn")
-                url="https://gfycat.com/$name"
-                notify "Uploading to $url..." 7
-                echo "$url"
-                echo -n "$url" | xsel -bi  # Read to clipboard.
-            elif [ "$choice" = "upload (imgur)" ]; then
-                clip_clear
-                output=$(upload_imgur "$fn")
-                url=$(parse "imgur" "$output")
-                notify "$url" 7
-                echo "$url"
-                echo -n "$url" | xsel -bi  # Read to clipboard.
-            elif [ "$choice" = "delete" ]; then
-                rm $fn
-            fi
-        fi
+        upload "$fn" "$tfn"
     else
         notify "$fn" 7
     fi
@@ -254,8 +254,6 @@ function parse() {
         awk -F"|" '{ print $2 }' <<< "$2"
     elif [ "$1" = "imgur" ]; then
         jq -r ".data.link" <<< "$2"
-        #sed -e 's/.*\"link\":"\([^"]*\).*/\1/' -e 's/\\//g' <<< "$2"
-        #sed -e 's/\"link\":"\([^"]*\)/\1/' -e 's/\\//g' <<< "$2"
     elif [ "$1" = "gfycat" ]; then
         jq -r ".gfyname" <<< "$2"
     fi
@@ -272,25 +270,7 @@ function main() {
         geometry=$(slop_geom "image")
         # Take the shot.
         shot "image" "$geometry"
-        # Parse imgur json into link.
-
-        # If noupload is not set.
-        if [ $NOUPLOAD == 0 ]; then
-            echo "uploading..."
-            # Clear cliboard before doing anything, so we can copy link to it later.
-            clip_clear
-            output=$(upload_imgur "$filename")
-            url=$(parse "imgur" "$output")
-            # Notify user that upload has finished.
-            notify "$url" 7
-            echo "$url"
-            # Read to clipboard, removing trailing newline.
-            echo -n "$url" | xsel -bi
-        else
-            notify "$filename" 7
-        fi
-
-        # echo "$url" | xsel -pi  # Read to primary.
+        upload "$filename" "$filename"
     elif [ "$1" = "video" ]; then
         geometry=$(slop_geom "video")
         wxh=$(parse "geometryx" $geometry)
@@ -304,7 +284,7 @@ function main() {
     elif [ "$1" = "stop" ]; then
         # Get info of recording process.
         local info
-        # Get infor from the pidfile.
+        # Get info from the pidfile.
         info=$(cat "$RECORD_PIDFILE")
         # Stop with parameters ("<pid> <type> <filename> <ratio>")
         stop_rec $info
