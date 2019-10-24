@@ -344,18 +344,17 @@ while getopts "hvsgrqd:u:f:" opt; do
         echo "Version: $VERSION"
         exit 0
         ;;
-    s ) RECORDING_TYPE="screenshot" ;;
-    g ) RECORDING_TYPE="gif" ;;
-    r ) RECORDING_TYPE="video" ;;
-    q ) RECORDING_TYPE="stop" ;;
+    s ) CAPTURE_TYPE="screenshot" ;;
+    g ) CAPTURE_TYPE="gif" ;;
+    r ) CAPTURE_TYPE="video" ;;
+    q ) CAPTURE_TYPE="stop" ;;
     d ) GEOMETRY="$OPTARG" ;;
     u ) UPLOAD_TO="$OPTARG" ;;
-    f ) FILENAME="$OPTARG" ;;
     esac
 done
 
-if [ $RECORDING_TYPE ]; then
-    main "$RECORDING_TYPE"
+if [ $CAPTURE_TYPE ]; then
+    main "$CAPTURE_TYPE"
 else
     if [ -a "$RECORD_PIDFILE" ]; then
         main $($DMENU_CMD <<< "$DMENU_RECORD_OPTS")
